@@ -414,7 +414,7 @@ static qboolean VID_SetMode (int width, int height, int refreshrate, int bpp, qb
 	CDAudio_Pause ();
 	BGM_Pause ();
 
-	q_snprintf(caption, sizeof(caption), "vkQuake " VKQUAKE_VER_STRING);
+	q_snprintf(caption, sizeof(caption), "filmicQuake " FILMICQUAKE_VER_STRING);
 
 	/* Create the window if needed, hidden */
 	if (!draw_context)
@@ -621,9 +621,9 @@ static void GL_InitInstance( void )
 	VkApplicationInfo application_info;
 	memset(&application_info, 0, sizeof(application_info));
 	application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	application_info.pApplicationName = "vkQuake";
+	application_info.pApplicationName = "filmicQuake";
 	application_info.applicationVersion = 1;
-	application_info.pEngineName = "vkQuake";
+	application_info.pEngineName = "filmicQuake";
 	application_info.engineVersion = 1;
 	application_info.apiVersion = VK_API_VERSION_1_0;
 
@@ -3450,7 +3450,7 @@ void SCR_ScreenShot_f (void)
 // find a file name to save it to
 	for (i=0; i<10000; i++)
 	{
-		q_snprintf (imagename, sizeof(imagename), "vkquake%04i.%s", i, ext);	// "fitz%04i.tga"
+		q_snprintf (imagename, sizeof(imagename), "filmicquake%04i.%s", i, ext);	// "fitz%04i.tga"
 		q_snprintf (checkname, sizeof(checkname), "%s/%s", com_gamedir, imagename);
 		if (Sys_FileTime(checkname) == -1)
 			break;	// file doesn't exist
