@@ -2025,6 +2025,11 @@ static void GL_DestroyRenderResources( void )
 	vkFreeDescriptorSets(vulkan_globals.device, vulkan_globals.descriptor_pool, 1, &vulkan_globals.grade_desc_set);
 	vulkan_globals.grade_desc_set = VK_NULL_HANDLE;
 
+	vkFreeDescriptorSets(vulkan_globals.device, vulkan_globals.descriptor_pool, 1, &vulkan_globals.blur_desc_sets[0]);
+	vkFreeDescriptorSets(vulkan_globals.device, vulkan_globals.descriptor_pool, 1, &vulkan_globals.blur_desc_sets[1]);
+	vulkan_globals.blur_desc_sets[0] = VK_NULL_HANDLE;
+	vulkan_globals.blur_desc_sets[1] = VK_NULL_HANDLE;
+
 	vkDestroyImageView(vulkan_globals.device, colorgrading_lut_view[0], NULL);
 	colorgrading_lut_view[0] = VK_NULL_HANDLE;
 	vkDestroyImage(vulkan_globals.device, vulkan_globals.colorlut_buffer, NULL);

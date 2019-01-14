@@ -1040,7 +1040,7 @@ qboolean GL_Set2D (void)
 		//
 		vkCmdPipelineBarrier(vulkan_globals.command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, image_barriers);
 		// HBLUR
-		const float blurSoftness = ((vid_blur.value + 0.01f)*2.0f);
+		const float blurSoftness = ((q_min(q_max(vid_blur.value, 0.f), 1.f) + 0.0f)*2.0f);
 		//
 		const uint32_t screen_size_and_axis[3] = { vid.width, vid.height, 0 };
 		const float aspect_time_soft[3] = { (float)vid.width / (float)vid.height, cl.time, blurSoftness };
@@ -1135,10 +1135,10 @@ qboolean GL_Set2D (void)
 		const float aspect_ratio_time_contrast_gamma_aberration_barrel_vignette[] = { 
 			(float)vid.width / (float)vid.height, // aspect
 			cl.time, // time
-			vid_aberration.value * 5.f, // aberration
-			vid_barrel.value * 1.5f, // barrel
-			vid_vignette.value, // vignette
-			vid_grain.value // grain
+			q_min(q_max(vid_aberration.value, 0.f), 1.f) * 5.f, // aberration
+			q_min(q_max(vid_barrel.value, 0.f), 1.f) * 1.5f, // barrel
+			q_min(q_max(vid_vignette.value, 0.f), 1.f), // vignette
+			q_min(q_max(vid_grain.value, 0.f), 1.f) // grain
 		};
 		vkCmdPushConstants(vulkan_globals.command_buffer, vulkan_globals.grade_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(screen_size), screen_size);
 		vkCmdPushConstants(	vulkan_globals.command_buffer,
