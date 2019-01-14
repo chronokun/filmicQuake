@@ -114,6 +114,7 @@ int main(int argc, char *argv[])
 	Sys_Printf("FitzQuake SDL port (c) SleepwalkR, Baker\n");
 	Sys_Printf("QuakeSpasm " QUAKESPASM_VER_STRING " (c) Ozkan Sezer, Eric Wasylishen & others\n");
 	Sys_Printf("vkQuake " VKQUAKE_VER_STRING " (c) Axel Gneiting & others\n");
+	Sys_Printf("filmicQuake " FILMICQUAKE_VER_STRING " (c) Michael Cameron\n");
 
 	Sys_Printf("Host_Init\n");
 	Host_Init();

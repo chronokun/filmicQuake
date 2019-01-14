@@ -47,6 +47,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #ifndef	VKQUAKE_VER_SUFFIX
 #define	VKQUAKE_VER_SUFFIX		// optional version suffix like -beta1
 #endif
+#define	FILMICQUAKE_VERSION		1.0
+#define	FILMICQUAKE_VER_PATCH	0	// helper to print a string like 0.92.1
+#ifndef	FILMICQUAKE_VER_SUFFIX
+#define	FILMICQUAKE_VER_SUFFIX		// optional version suffix like -beta1
+#endif
 
 #define	QS_STRINGIFY_(x)	#x
 #define	QS_STRINGIFY(x)	QS_STRINGIFY_(x)
@@ -54,6 +59,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 // combined version string like "0.92.1-beta1"
 #define	QUAKESPASM_VER_STRING	QS_STRINGIFY(QUAKESPASM_VERSION) "." QS_STRINGIFY(QUAKESPASM_VER_PATCH) QUAKESPASM_VER_SUFFIX
 #define VKQUAKE_VER_STRING	QS_STRINGIFY(VKQUAKE_VERSION) "." QS_STRINGIFY(VKQUAKE_VER_PATCH) VKQUAKE_VER_SUFFIX
+#define FILMICQUAKE_VER_STRING	QS_STRINGIFY(FILMICQUAKE_VERSION) "." QS_STRINGIFY(FILMICQUAKE_VER_PATCH) FILMICQUAKE_VER_SUFFIX
 
 //define	PARANOID			// speed sapping error checking
 
