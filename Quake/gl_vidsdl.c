@@ -3408,7 +3408,7 @@ void SCR_ScreenShot_f (void)
 	VkBuffer buffer;
 	VkResult err;
 	char	ext[4];
-	char	imagename[16];  //johnfitz -- was [80]
+	char	imagename[24];  //johnfitz -- was [80]
 	char	checkname[MAX_OSPATH];
 	int	i, quality;
 	qboolean	ok;
