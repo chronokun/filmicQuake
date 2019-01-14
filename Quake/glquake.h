@@ -132,6 +132,8 @@ typedef struct
 	// Buffers
 	VkImage								color_buffers[NUM_COLOR_BUFFERS];
 
+	VkImage								colorlut_buffer;
+
 	// Index buffers
 	VkBuffer							fan_index_buffer;
 
@@ -176,6 +178,10 @@ typedef struct
 	VkPipeline							showtris_pipeline;
 	VkPipeline							showtris_depth_test_pipeline;
 	VkPipelineLayout					showtris_pipeline_layout;
+	VkPipeline							grade_pipeline;
+	VkPipelineLayout					grade_pipeline_layout;
+	VkPipeline							blur_pipeline;
+	VkPipelineLayout					blur_pipeline_layout;
 
 	// Descriptors
 	VkDescriptorPool					descriptor_pool;
@@ -185,10 +191,15 @@ typedef struct
 	VkDescriptorSet						screen_warp_desc_set;
 	VkDescriptorSetLayout				screen_warp_set_layout;
 	VkDescriptorSetLayout				single_texture_cs_write_set_layout;
+	VkDescriptorSet						grade_desc_set;
+	VkDescriptorSetLayout				grade_set_layout;
+	VkDescriptorSet						blur_desc_sets[2];
+	VkDescriptorSetLayout				blur_set_layout;
 
 	// Samplers
 	VkSampler							point_sampler;
 	VkSampler							linear_sampler;
+	VkSampler							clamped_linear_sampler;
 	VkSampler							point_aniso_sampler;
 	VkSampler							linear_aniso_sampler;
 

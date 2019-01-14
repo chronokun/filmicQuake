@@ -997,7 +997,10 @@ static void TexMgr_LoadImage32 (gltexture_t *glt, unsigned *data)
 		return;
 	}
 	else
+	{
 		glt->target_image_view = VK_NULL_HANDLE;
+		glt->warp_write_descriptor_set = VK_NULL_HANDLE;
+	}
 
 	glt->frame_buffer = VK_NULL_HANDLE;
 
@@ -1432,6 +1435,7 @@ static void GL_DeleteTexture (gltexture_t *texture)
 	vkDestroyImageView(vulkan_globals.device, texture->image_view, NULL);
 	vkDestroyImage(vulkan_globals.device, texture->image, NULL);
 	vkFreeDescriptorSets(vulkan_globals.device, vulkan_globals.descriptor_pool, 1, &texture->descriptor_set);
+	vkFreeDescriptorSets(vulkan_globals.device, vulkan_globals.descriptor_pool, 1, &texture->warp_write_descriptor_set);
 
 	GL_FreeFromHeaps(TEXTURE_MAX_HEAPS, texmgr_heaps, texture->heap, texture->heap_node, &num_vulkan_tex_allocations);
 

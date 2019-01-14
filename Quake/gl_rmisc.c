@@ -1030,6 +1030,51 @@ void R_CreateDescriptorSetLayouts()
 	err = vkCreateDescriptorSetLayout(vulkan_globals.device, &descriptor_set_layout_create_info, NULL, &vulkan_globals.single_texture_cs_write_set_layout);
 	if (err != VK_SUCCESS)
 		Sys_Error("vkCreateDescriptorSetLayout failed");
+
+	VkDescriptorSetLayoutBinding grade_layout_bindings[3];
+	memset(&grade_layout_bindings, 0, sizeof(grade_layout_bindings));
+	// input
+	grade_layout_bindings[0].binding = 0;
+	grade_layout_bindings[0].descriptorCount = 1;
+	grade_layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	grade_layout_bindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	// color lut
+	grade_layout_bindings[1].binding = 1;
+	grade_layout_bindings[1].descriptorCount = 1;
+	grade_layout_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	grade_layout_bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	// output
+	grade_layout_bindings[2].binding = 2;
+	grade_layout_bindings[2].descriptorCount = 1;
+	grade_layout_bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	grade_layout_bindings[2].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+	descriptor_set_layout_create_info.bindingCount = 3;
+	descriptor_set_layout_create_info.pBindings = grade_layout_bindings;
+
+	err = vkCreateDescriptorSetLayout(vulkan_globals.device, &descriptor_set_layout_create_info, NULL, &vulkan_globals.grade_set_layout);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkCreateDescriptorSetLayout failed");
+
+	VkDescriptorSetLayoutBinding blur_layout_bindings[2];
+	memset(&blur_layout_bindings, 0, sizeof(blur_layout_bindings));
+	// input
+	blur_layout_bindings[0].binding = 0;
+	blur_layout_bindings[0].descriptorCount = 1;
+	blur_layout_bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	blur_layout_bindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+	// output
+	blur_layout_bindings[1].binding = 1;
+	blur_layout_bindings[1].descriptorCount = 1;
+	blur_layout_bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	blur_layout_bindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+	descriptor_set_layout_create_info.bindingCount = 2;
+	descriptor_set_layout_create_info.pBindings = blur_layout_bindings;
+
+	err = vkCreateDescriptorSetLayout(vulkan_globals.device, &descriptor_set_layout_create_info, NULL, &vulkan_globals.blur_set_layout);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkCreateDescriptorSetLayout failed");
 }
 
 /*
@@ -1047,7 +1092,7 @@ void R_CreateDescriptorPool()
 	pool_sizes[2].type = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
 	pool_sizes[2].descriptorCount = 2;
 	pool_sizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-	pool_sizes[3].descriptorCount = 1;
+	pool_sizes[3].descriptorCount = MAX_GLTEXTURES + 1;
 
 	VkDescriptorPoolCreateInfo descriptor_pool_create_info;
 	memset(&descriptor_pool_create_info, 0, sizeof(descriptor_pool_create_info));
@@ -1197,7 +1242,46 @@ void R_CreatePipelineLayouts()
 
 	err = vkCreatePipelineLayout(vulkan_globals.device, &pipeline_layout_create_info, NULL, &vulkan_globals.showtris_pipeline_layout);
 	if (err != VK_SUCCESS)
-		Sys_Error("vkCreatePipelineLayout failed");}
+		Sys_Error("vkCreatePipelineLayout failed");
+
+	// Color Grading
+	VkDescriptorSetLayout grade_descriptor_set_layouts[1] = {
+		vulkan_globals.grade_set_layout,
+	};
+
+	memset(&push_constant_range, 0, sizeof(push_constant_range));
+	push_constant_range.offset = 0;
+	push_constant_range.size = 3 * sizeof(uint32_t) + 6 * sizeof(float);
+	push_constant_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+	pipeline_layout_create_info.setLayoutCount = 1;
+	pipeline_layout_create_info.pSetLayouts = grade_descriptor_set_layouts;
+	pipeline_layout_create_info.pushConstantRangeCount = 1;
+	pipeline_layout_create_info.pPushConstantRanges = &push_constant_range;
+
+	err = vkCreatePipelineLayout(vulkan_globals.device, &pipeline_layout_create_info, NULL, &vulkan_globals.grade_pipeline_layout);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkCreatePipelineLayout failed");
+
+	// Separable Blur
+	VkDescriptorSetLayout blur_descriptor_set_layouts[1] = {
+		vulkan_globals.blur_set_layout,
+	};
+
+	memset(&push_constant_range, 0, sizeof(push_constant_range));
+	push_constant_range.offset = 0;
+	push_constant_range.size = 3 * sizeof(uint32_t) + 3 * sizeof(float);
+	push_constant_range.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+	pipeline_layout_create_info.setLayoutCount = 1;
+	pipeline_layout_create_info.pSetLayouts = blur_descriptor_set_layouts;
+	pipeline_layout_create_info.pushConstantRangeCount = 1;
+	pipeline_layout_create_info.pPushConstantRanges = &push_constant_range;
+
+	err = vkCreatePipelineLayout(vulkan_globals.device, &pipeline_layout_create_info, NULL, &vulkan_globals.blur_pipeline_layout);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkCreatePipelineLayout failed");
+}
 
 /*
 ===============
@@ -1259,6 +1343,20 @@ void R_InitSamplers()
 			Sys_Error("vkCreateSampler failed");
 
 		GL_SetObjectName((uint64_t)vulkan_globals.linear_aniso_sampler, VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT, "linear_aniso");
+
+		sampler_create_info.magFilter = VK_FILTER_LINEAR;
+		sampler_create_info.minFilter = VK_FILTER_LINEAR;
+		sampler_create_info.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+		sampler_create_info.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler_create_info.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler_create_info.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+		sampler_create_info.anisotropyEnable = VK_FALSE;
+		sampler_create_info.maxAnisotropy = 1.0f;
+		err = vkCreateSampler(vulkan_globals.device, &sampler_create_info, NULL, &vulkan_globals.clamped_linear_sampler);
+		if (err != VK_SUCCESS)
+			Sys_Error("vkCreateSampler failed");
+
+		GL_SetObjectName((uint64_t)vulkan_globals.linear_sampler, VK_DEBUG_REPORT_OBJECT_TYPE_SAMPLER_EXT, "clamped_linear");
 	}
 
 	TexMgr_UpdateTextureDescriptorSets();
@@ -1317,6 +1415,8 @@ void R_CreatePipelines()
 	VkShaderModule cs_tex_warp_module = R_CreateShaderModule(cs_tex_warp_comp_spv, cs_tex_warp_comp_spv_size);
 	VkShaderModule showtris_vert_module = R_CreateShaderModule(showtris_vert_spv, showtris_vert_spv_size);
 	VkShaderModule showtris_frag_module = R_CreateShaderModule(showtris_frag_spv, showtris_frag_spv_size);
+	VkShaderModule grade_comp_module = R_CreateShaderModule(grade_comp_spv, grade_comp_spv_size);
+	VkShaderModule blur_comp_module = R_CreateShaderModule(blur_comp_spv, blur_comp_spv_size);
 
 	VkPipelineDynamicStateCreateInfo dynamic_state_create_info;
 	memset(&dynamic_state_create_info, 0, sizeof(dynamic_state_create_info));
@@ -1948,6 +2048,50 @@ void R_CreatePipelines()
 
 	GL_SetObjectName((uint64_t)vulkan_globals.raster_tex_warp_pipeline, VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT, "screen_warp");
 
+	//================
+	// Color Grade
+	//================
+	memset(&compute_shader_stage, 0, sizeof(compute_shader_stage));
+	compute_shader_stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	compute_shader_stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	compute_shader_stage.module = grade_comp_module;
+	compute_shader_stage.pName = "main";
+
+	memset(&compute_pipeline_create_info, 0, sizeof(compute_pipeline_create_info));
+	compute_pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	compute_pipeline_create_info.stage = compute_shader_stage;
+	compute_pipeline_create_info.layout = vulkan_globals.grade_pipeline_layout;
+
+	assert(vulkan_globals.grade_pipeline == VK_NULL_HANDLE);
+	err = vkCreateComputePipelines(vulkan_globals.device, VK_NULL_HANDLE, 1, &compute_pipeline_create_info, NULL, &vulkan_globals.grade_pipeline);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkCreateGraphicsPipelines failed");
+
+	GL_SetObjectName((uint64_t)vulkan_globals.grade_pipeline, VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT, "grade");
+
+	//================
+	// Separable Blur
+	//================
+	memset(&compute_shader_stage, 0, sizeof(compute_shader_stage));
+	compute_shader_stage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+	compute_shader_stage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
+	compute_shader_stage.module = blur_comp_module;
+	compute_shader_stage.pName = "main";
+
+	memset(&compute_pipeline_create_info, 0, sizeof(compute_pipeline_create_info));
+	compute_pipeline_create_info.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	compute_pipeline_create_info.stage = compute_shader_stage;
+	compute_pipeline_create_info.layout = vulkan_globals.blur_pipeline_layout;
+
+	assert(vulkan_globals.blur_pipeline == VK_NULL_HANDLE);
+	err = vkCreateComputePipelines(vulkan_globals.device, VK_NULL_HANDLE, 1, &compute_pipeline_create_info, NULL, &vulkan_globals.blur_pipeline);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkCreateGraphicsPipelines failed");
+
+	GL_SetObjectName((uint64_t)vulkan_globals.grade_pipeline, VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT, "blur");
+
+	vkDestroyShaderModule(vulkan_globals.device, blur_comp_module, NULL);
+	vkDestroyShaderModule(vulkan_globals.device, grade_comp_module, NULL);
 	vkDestroyShaderModule(vulkan_globals.device, showtris_frag_module, NULL);
 	vkDestroyShaderModule(vulkan_globals.device, showtris_vert_module, NULL);
 	vkDestroyShaderModule(vulkan_globals.device, cs_tex_warp_module, NULL);
@@ -2019,6 +2163,10 @@ void R_DestroyPipelines(void)
 	vulkan_globals.screen_warp_pipeline = VK_NULL_HANDLE;
 	vkDestroyPipeline(vulkan_globals.device, vulkan_globals.cs_tex_warp_pipeline, NULL);
 	vulkan_globals.cs_tex_warp_pipeline = VK_NULL_HANDLE;
+	vkDestroyPipeline(vulkan_globals.device, vulkan_globals.grade_pipeline, NULL);
+	vulkan_globals.grade_pipeline = VK_NULL_HANDLE;
+	vkDestroyPipeline(vulkan_globals.device, vulkan_globals.blur_pipeline, NULL);
+	vulkan_globals.blur_pipeline = VK_NULL_HANDLE;
 	if (vulkan_globals.showtris_pipeline != VK_NULL_HANDLE)
 	{
 		vkDestroyPipeline(vulkan_globals.device, vulkan_globals.showtris_pipeline, NULL);

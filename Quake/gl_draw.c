@@ -940,6 +940,7 @@ qboolean GL_Set2D (void)
 
 	vkCmdEndRenderPass(vulkan_globals.command_buffer);
 
+#if 0
 	if (render_warp)
 	{
 		VkImageMemoryBarrier image_barriers[2];
@@ -1009,6 +1010,172 @@ qboolean GL_Set2D (void)
 
 		vkCmdPipelineBarrier(vulkan_globals.command_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 1, &memory_barrier, 0, NULL, 0, NULL);
 	}
+#else
+	{
+		const float blurSoftness = ((vid_blur.value + 0.01f)*2.0f);
+		// HBLUR
+		VkImageMemoryBarrier image_barriers[2];
+		// Input
+		image_barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_barriers[0].pNext = NULL;
+		image_barriers[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		image_barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		image_barriers[0].oldLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		image_barriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		image_barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[0].image = vulkan_globals.color_buffers[1];
+		image_barriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		image_barriers[0].subresourceRange.baseMipLevel = 0;
+		image_barriers[0].subresourceRange.levelCount = 1;
+		image_barriers[0].subresourceRange.baseArrayLayer = 0;
+		image_barriers[0].subresourceRange.layerCount = 1;
+		// Output
+		image_barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_barriers[1].pNext = NULL;
+		image_barriers[1].srcAccessMask = 0;
+		image_barriers[1].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		image_barriers[1].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		image_barriers[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		image_barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[1].image = vulkan_globals.color_buffers[0];
+		image_barriers[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		image_barriers[1].subresourceRange.baseMipLevel = 0;
+		image_barriers[1].subresourceRange.levelCount = 1;
+		image_barriers[1].subresourceRange.baseArrayLayer = 0;
+		image_barriers[1].subresourceRange.layerCount = 1;
+		//
+		vkCmdPipelineBarrier(vulkan_globals.command_buffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 0, NULL, 2, image_barriers);
+		//
+		const uint32_t screen_size_and_axis[3] = { vid.width, vid.height, 0 };
+		const float aspect_time_soft[3] = { (float)vid.width / (float)vid.height, cl.time, blurSoftness };
+		//
+		vkCmdPushConstants(vulkan_globals.command_buffer, vulkan_globals.blur_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(screen_size_and_axis), screen_size_and_axis);
+		vkCmdPushConstants(vulkan_globals.command_buffer, vulkan_globals.blur_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, sizeof(screen_size_and_axis), sizeof(aspect_time_soft), aspect_time_soft);
+		//
+		vkCmdBindDescriptorSets(vulkan_globals.command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_globals.blur_pipeline_layout, 0, 1, &vulkan_globals.blur_desc_sets[0], 0, NULL);
+		vkCmdBindPipeline(vulkan_globals.command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_globals.blur_pipeline);
+		vkCmdDispatch(vulkan_globals.command_buffer, (vid.width + 255) / 256, vid.height, 1);
+		// VBLUR
+		// Input
+		image_barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_barriers[0].pNext = NULL;
+		image_barriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		image_barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		image_barriers[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		image_barriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		image_barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[0].image = vulkan_globals.color_buffers[0];
+		image_barriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		image_barriers[0].subresourceRange.baseMipLevel = 0;
+		image_barriers[0].subresourceRange.levelCount = 1;
+		image_barriers[0].subresourceRange.baseArrayLayer = 0;
+		image_barriers[0].subresourceRange.layerCount = 1;
+		// Output
+		image_barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_barriers[1].pNext = NULL;
+		image_barriers[1].srcAccessMask = 0;
+		image_barriers[1].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		image_barriers[1].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		image_barriers[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		image_barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[1].image = vulkan_globals.color_buffers[1];
+		image_barriers[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		image_barriers[1].subresourceRange.baseMipLevel = 0;
+		image_barriers[1].subresourceRange.levelCount = 1;
+		image_barriers[1].subresourceRange.baseArrayLayer = 0;
+		image_barriers[1].subresourceRange.layerCount = 1;
+		//
+		vkCmdPipelineBarrier(vulkan_globals.command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 0, NULL, 2, image_barriers);
+		//
+		const uint32_t screen_size_and_axis2[3] = { vid.width, vid.height, 1 };
+		const float aspect_time_soft2[3] = { (float)vid.width / (float)vid.height, cl.time, blurSoftness };
+		//
+		vkCmdPushConstants(vulkan_globals.command_buffer, vulkan_globals.blur_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(screen_size_and_axis2), screen_size_and_axis2);
+		vkCmdPushConstants(vulkan_globals.command_buffer, vulkan_globals.blur_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, sizeof(screen_size_and_axis2), sizeof(aspect_time_soft2), aspect_time_soft2);
+		//
+		vkCmdBindDescriptorSets(vulkan_globals.command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_globals.blur_pipeline_layout, 0, 1, &vulkan_globals.blur_desc_sets[1], 0, NULL);
+		vkCmdBindPipeline(vulkan_globals.command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_globals.blur_pipeline);
+		vkCmdDispatch(vulkan_globals.command_buffer, (vid.height + 255) / 256, vid.width, 1);
+	}
+	// color grading + other fx
+	{
+		VkImageMemoryBarrier image_barriers[2];
+		// Input
+		image_barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_barriers[1].pNext = NULL;
+		image_barriers[1].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		image_barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		image_barriers[1].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		image_barriers[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		image_barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[1].image = vulkan_globals.color_buffers[1];
+		image_barriers[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		image_barriers[1].subresourceRange.baseMipLevel = 0;
+		image_barriers[1].subresourceRange.levelCount = 1;
+		image_barriers[1].subresourceRange.baseArrayLayer = 0;
+		image_barriers[1].subresourceRange.layerCount = 1;
+		// Output
+		image_barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_barriers[0].pNext = NULL;
+		image_barriers[0].srcAccessMask = 0;
+		image_barriers[0].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		image_barriers[0].oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		image_barriers[0].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		image_barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[0].image = vulkan_globals.color_buffers[0];
+		image_barriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		image_barriers[0].subresourceRange.baseMipLevel = 0;
+		image_barriers[0].subresourceRange.levelCount = 1;
+		image_barriers[0].subresourceRange.baseArrayLayer = 0;
+		image_barriers[0].subresourceRange.layerCount = 1;
+
+		vkCmdPipelineBarrier(vulkan_globals.command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, NULL, 0, NULL, 2, image_barriers);
+		
+		const uint32_t screen_size[3] = { vid.width, vid.height, (uint32_t)vid_aces.value };
+		const float aspect_ratio_time_contrast_gamma_aberration_barrel_vignette[] = { 
+			(float)vid.width / (float)vid.height, // aspect
+			cl.time, // time
+			vid_aberration.value * 5.f, // aberration
+			vid_barrel.value * 1.5f, // barrel
+			vid_vignette.value, // vignette
+			vid_grain.value // grain
+		};
+		vkCmdPushConstants(vulkan_globals.command_buffer, vulkan_globals.grade_pipeline_layout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(screen_size), screen_size);
+		vkCmdPushConstants(	vulkan_globals.command_buffer,
+							vulkan_globals.grade_pipeline_layout,
+							VK_SHADER_STAGE_COMPUTE_BIT,
+							sizeof(screen_size),
+							sizeof(aspect_ratio_time_contrast_gamma_aberration_barrel_vignette),
+							aspect_ratio_time_contrast_gamma_aberration_barrel_vignette);
+
+		vkCmdBindDescriptorSets(vulkan_globals.command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_globals.grade_pipeline_layout, 0, 1, &vulkan_globals.grade_desc_set, 0, NULL);
+		vkCmdBindPipeline(vulkan_globals.command_buffer, VK_PIPELINE_BIND_POINT_COMPUTE, vulkan_globals.grade_pipeline);
+		vkCmdDispatch(vulkan_globals.command_buffer, (vid.width + 7) / 8, (vid.height + 7) / 8, 1);
+
+		image_barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		image_barriers[0].pNext = NULL;
+		image_barriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		image_barriers[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_READ_BIT | VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+		image_barriers[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		image_barriers[0].newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+		image_barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		image_barriers[0].image = vulkan_globals.color_buffers[0];
+		image_barriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		image_barriers[0].subresourceRange.baseMipLevel = 0;
+		image_barriers[0].subresourceRange.levelCount = 1;
+		image_barriers[0].subresourceRange.baseArrayLayer = 0;
+		image_barriers[0].subresourceRange.layerCount = 1;
+
+		vkCmdPipelineBarrier(vulkan_globals.command_buffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, 0, 0, NULL, 0, NULL, 1, image_barriers);
+	}
+#endif
 
 	if (GL_AcquireNextSwapChainImage() == false)
 		return false;

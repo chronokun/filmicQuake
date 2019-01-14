@@ -980,6 +980,12 @@ enum
 	OPT_SCRSIZE,
 	OPT_GAMMA,
 	OPT_CONTRAST,
+	OPT_ABERRATION,
+	OPT_BARREL,
+	OPT_VIGNETTE,
+	OPT_GRAIN,
+	OPT_BLUR,
+	OPT_ACES,
 	OPT_MOUSESPEED,
 	OPT_SBALPHA,
 	OPT_SNDVOL,
@@ -1053,6 +1059,39 @@ void M_AdjustSliders (int dir)
 		if (f < 1)	f = 1;
 		else if (f > 2)	f = 2;
 		Cvar_SetValue ("contrast", f);
+		break;
+	case OPT_ABERRATION:	// aberration
+		f = vid_aberration.value + dir * 0.1;
+		if (f < 0)	f = 0;
+		else if (f > 1)	f = 1;
+		Cvar_SetValue ("vid_aberration", f);
+		break;
+	case OPT_BARREL:	// barrel
+		f = vid_barrel.value + dir * 0.1;
+		if (f < 0)	f = 0;
+		else if (f > 1)	f = 1;
+		Cvar_SetValue ("vid_barrel", f);
+		break;
+	case OPT_VIGNETTE:	// vignette
+		f = vid_vignette.value + dir * 0.1;
+		if (f < 0)	f = 0;
+		else if (f > 1)	f = 1;
+		Cvar_SetValue ("vid_vignette", f);
+		break;
+	case OPT_GRAIN:	// grain
+		f = vid_grain.value + dir * 0.1;
+		if (f < 0)	f = 0;
+		else if (f > 1)	f = 1;
+		Cvar_SetValue ("vid_grain", f);
+		break;
+	case OPT_BLUR:	// blur
+		f = vid_blur.value + dir * 0.1;
+		if (f < 0)	f = 0;
+		else if (f > 1)	f = 1;
+		Cvar_SetValue ("vid_blur", f);
+		break;
+	case OPT_ACES:	// ACES
+		Cvar_Set ("vid_aces", vid_aces.value ? "0" : "1");
 		break;
 	case OPT_MOUSESPEED:	// mouse speed
 		f = sensitivity.value + dir * 0.5;
@@ -1200,6 +1239,36 @@ void M_Options_Draw (void)
 	M_Print (16, 32 + 8*OPT_CONTRAST,	"              Contrast");
 	r = vid_contrast.value - 1.0;
 	M_DrawSlider (220, 32 + 8*OPT_CONTRAST, r);
+
+	// OPT_ABERRATION:
+	M_Print (16, 32 + 8*OPT_ABERRATION, "            Aberration");
+	r = vid_aberration.value;
+	M_DrawSlider (220, 32 + 8*OPT_ABERRATION, r);
+
+	// OPT_BARREL:
+	M_Print (16, 32 + 8*OPT_BARREL,		"     Barrel Distortion");
+	r = vid_barrel.value;
+	M_DrawSlider (220, 32 + 8*OPT_BARREL, r);
+
+	// OPT_VIGNETTE:
+	M_Print (16, 32 + 8*OPT_VIGNETTE,	"              Vignette");
+	r = vid_vignette.value;
+	M_DrawSlider (220, 32 + 8*OPT_VIGNETTE, r);
+
+	// OPT_GRAIN:
+	M_Print (16, 32 + 8*OPT_GRAIN,		"            Film Grain");
+	r = vid_grain.value;
+	M_DrawSlider (220, 32 + 8*OPT_GRAIN, r);
+
+	// OPT_BLUR:
+	M_Print (16, 32 + 8*OPT_BLUR,		"           Blur Amount");
+	r = vid_blur.value;
+	M_DrawSlider (220, 32 + 8*OPT_BLUR, r);
+
+	// OPT_ACES:
+	M_Print (16, 32 + 8*OPT_ACES,		"      ACES Tonemapping");
+	r = vid_aces.value;
+	M_DrawCheckbox(220, 32 + 8*OPT_ACES, (int)r);
 	
 	// OPT_MOUSESPEED:
 	M_Print (16, 32 + 8*OPT_MOUSESPEED,	"           Mouse Speed");
@@ -1696,7 +1765,7 @@ void M_Quit_Draw (void) //johnfitz -- modified for new quit message
 		m_state = m_quit;
 	}
 
-	sprintf(msg1, "filmicQuake " FILMICQUAKE_VER_STRING);
+	sprintf(msg1, "vkQuake " VKQUAKE_VER_STRING);
 
 	//okay, this is kind of fucked up.  M_DrawTextBox will always act as if
 	//width is even. Also, the width and lines values are for the interior of the box,

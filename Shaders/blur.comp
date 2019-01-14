@@ -1,0 +1,68 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+
+layout(push_constant) uniform PushConsts {
+	uvec2 screen_size;
+	int blurAxis;
+	float aspect_ratio;
+	float time;
+	float softness;
+} push_constants;
+
+layout(set = 0, binding = 0, rgba8) uniform readonly image2D input_image;
+layout(set = 0, binding = 1, rgba8) uniform writeonly image2D output_image;
+
+#define GROUPSIZE 256
+#define PI 3.1415926535897932384626433832795
+#define BLURSIZE 4
+
+layout (local_size_x = GROUPSIZE, local_size_y = 1) in;
+
+shared vec3 input_block[GROUPSIZE + (2*BLURSIZE)];
+
+float gaussian(float x, float c)
+{
+	return exp(-(x*x)/(2*c*c));
+}
+
+void main() 
+{
+	ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = ivec2(push_constants.screen_size);
+	
+	ivec2 storePosition;
+
+	uint lid = gl_LocalInvocationID.x;
+	ivec2 coords;
+
+	if(push_constants.blurAxis == 0) {
+		storePosition = gid;
+		coords = ivec2(clamp(gid.x-BLURSIZE, 0, size[push_constants.blurAxis]-1), gid.y);
+	} else {
+		coords = ivec2(gid.y, clamp(gid.x-BLURSIZE, 0, size[push_constants.blurAxis]-1));
+		storePosition = gid.yx;
+	}
+
+	input_block[lid] = imageLoad(input_image, coords).xyz;
+	
+	if(lid > (GROUPSIZE - ((2*BLURSIZE)+1))) {
+		coords[push_constants.blurAxis] = clamp(gid.x+BLURSIZE, 0, size[push_constants.blurAxis]-1);
+		input_block[lid+(2*BLURSIZE)] = imageLoad(input_image, coords).xyz;
+	}
+	//
+	barrier();
+	//
+	if(gid.x < size.x) {
+		vec3 finalColor = vec3(0.);
+		float divisor = 0.0;
+		for(uint i = 0; i < 1+(2*BLURSIZE); i++) {
+			float weight = gaussian(float(i)-BLURSIZE, push_constants.softness);
+			finalColor += input_block[lid+i] * weight;
+			divisor += weight;
+		}
+		finalColor *= (1./divisor);
+		//finalColor[push_constants.blurAxis] = 0.;
+		imageStore(output_image, storePosition, vec4(finalColor, 1.));
+	}
+}

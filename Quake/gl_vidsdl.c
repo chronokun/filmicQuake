@@ -99,6 +99,13 @@ cvar_t vid_fsaamode = { "vid_fsaamode", "0", CVAR_ARCHIVE };
 
 cvar_t		vid_gamma = {"gamma", "1", CVAR_ARCHIVE}; //johnfitz -- moved here from view.c
 cvar_t		vid_contrast = {"contrast", "1", CVAR_ARCHIVE}; //QuakeSpasm, MarkV
+// colorgrading stuff
+cvar_t		vid_aberration = {"vid_aberration", "1", CVAR_ARCHIVE};
+cvar_t		vid_barrel = {"vid_barrel", "1", CVAR_ARCHIVE};
+cvar_t		vid_vignette = {"vid_vignette", "1", CVAR_ARCHIVE};
+cvar_t		vid_grain = {"vid_grain", "1", CVAR_ARCHIVE};
+cvar_t		vid_blur = {"vid_blur", "1", CVAR_ARCHIVE};
+cvar_t		vid_aces = {"vid_aces", "1", CVAR_ARCHIVE};
 
 // Vulkan
 static VkInstance					vulkan_instance;
@@ -131,6 +138,9 @@ static VkImage						msaa_color_buffer;
 static VkDeviceMemory				msaa_color_buffer_memory;
 static VkImageView					msaa_color_buffer_view;
 static VkDescriptorSet				postprocess_descriptor_set;
+
+static VkDeviceMemory				colorgrading_lut_memory[1];
+static VkImageView					colorgrading_lut_view[1];
 
 static PFN_vkGetInstanceProcAddr fpGetInstanceProcAddr;
 static PFN_vkGetDeviceProcAddr fpGetDeviceProcAddr;
@@ -192,6 +202,12 @@ static void VID_Gamma_Init (void)
 {
 	Cvar_RegisterVariable (&vid_gamma);
 	Cvar_RegisterVariable (&vid_contrast);
+	Cvar_RegisterVariable (&vid_aberration);
+	Cvar_RegisterVariable (&vid_barrel);
+	Cvar_RegisterVariable (&vid_vignette);
+	Cvar_RegisterVariable (&vid_grain);
+	Cvar_RegisterVariable (&vid_blur);
+	Cvar_RegisterVariable (&vid_aces);	
 }
 
 /*
@@ -398,7 +414,7 @@ static qboolean VID_SetMode (int width, int height, int refreshrate, int bpp, qb
 	CDAudio_Pause ();
 	BGM_Pause ();
 
-	q_snprintf(caption, sizeof(caption), "filmicQuake " FILMICQUAKE_VER_STRING);
+	q_snprintf(caption, sizeof(caption), "vkQuake " VKQUAKE_VER_STRING);
 
 	/* Create the window if needed, hidden */
 	if (!draw_context)
@@ -794,7 +810,8 @@ static void GL_InitDevice( void )
 	const char * const device_extensions[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_DEBUG_MARKER_EXTENSION_NAME };
 
 	vkGetPhysicalDeviceFeatures(vulkan_physical_device, &vulkan_physical_device_features);
-	const VkBool32 extended_format_support = vulkan_physical_device_features.shaderStorageImageExtendedFormats;
+	//const VkBool32 extended_format_support = vulkan_physical_device_features.shaderStorageImageExtendedFormats;
+	const VkBool32 extended_format_support = VK_FALSE;
 	const VkBool32 sampler_anisotropic = vulkan_physical_device_features.samplerAnisotropy;
 
 	VkPhysicalDeviceFeatures device_features;
@@ -1411,6 +1428,32 @@ static void GL_CreateDescriptorSets(void)
 	assert(postprocess_descriptor_set == VK_NULL_HANDLE);
 	vkAllocateDescriptorSets(vulkan_globals.device, &descriptor_set_allocate_info, &postprocess_descriptor_set);
 
+	memset(&descriptor_set_allocate_info, 0, sizeof(descriptor_set_allocate_info));
+	descriptor_set_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	descriptor_set_allocate_info.descriptorPool = vulkan_globals.descriptor_pool;
+	descriptor_set_allocate_info.descriptorSetCount = 1;
+	descriptor_set_allocate_info.pSetLayouts = &vulkan_globals.grade_set_layout;
+
+	assert(vulkan_globals.grade_desc_set == VK_NULL_HANDLE);
+	vkAllocateDescriptorSets(vulkan_globals.device, &descriptor_set_allocate_info, &vulkan_globals.grade_desc_set);
+
+	memset(&descriptor_set_allocate_info, 0, sizeof(descriptor_set_allocate_info));
+	descriptor_set_allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	descriptor_set_allocate_info.descriptorPool = vulkan_globals.descriptor_pool;
+	descriptor_set_allocate_info.descriptorSetCount = 1;
+	descriptor_set_allocate_info.pSetLayouts = &vulkan_globals.blur_set_layout;
+
+	assert(vulkan_globals.blur_desc_sets[0] == VK_NULL_HANDLE);
+	assert(vulkan_globals.blur_desc_sets[1] == VK_NULL_HANDLE);
+	vkAllocateDescriptorSets(vulkan_globals.device, &descriptor_set_allocate_info, &vulkan_globals.blur_desc_sets[0]);
+	vkAllocateDescriptorSets(vulkan_globals.device, &descriptor_set_allocate_info, &vulkan_globals.blur_desc_sets[1]);
+
+	VkDescriptorImageInfo lut_image_info;
+	memset(&lut_image_info, 0, sizeof(lut_image_info));
+	lut_image_info.imageView = colorgrading_lut_view[0];
+	lut_image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	lut_image_info.sampler = vulkan_globals.clamped_linear_sampler;
+
 	VkDescriptorImageInfo image_info;
 	memset(&image_info, 0, sizeof(image_info));
 	image_info.imageView = color_buffers_view[0];
@@ -1436,16 +1479,16 @@ static void GL_CreateDescriptorSets(void)
 	assert(vulkan_globals.screen_warp_desc_set == VK_NULL_HANDLE);
 	vkAllocateDescriptorSets(vulkan_globals.device, &descriptor_set_allocate_info, &vulkan_globals.screen_warp_desc_set);
 
-	VkDescriptorImageInfo input_image_info;
-	memset(&input_image_info, 0, sizeof(input_image_info));
-	input_image_info.imageView = color_buffers_view[1];
-	input_image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	input_image_info.sampler = vulkan_globals.linear_sampler;
+	VkDescriptorImageInfo input_to_warp_image_info;
+	memset(&input_to_warp_image_info, 0, sizeof(input_to_warp_image_info));
+	input_to_warp_image_info.imageView = color_buffers_view[0];
+	input_to_warp_image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	input_to_warp_image_info.sampler = vulkan_globals.linear_sampler;
 
-	VkDescriptorImageInfo output_image_info;
-	memset(&output_image_info, 0, sizeof(output_image_info));
-	output_image_info.imageView = color_buffers_view[0];
-	output_image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	VkDescriptorImageInfo warp_to_blur_image_info;
+	memset(&warp_to_blur_image_info, 0, sizeof(warp_to_blur_image_info));
+	warp_to_blur_image_info.imageView = color_buffers_view[1];
+	warp_to_blur_image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 
 	VkWriteDescriptorSet screen_warp_writes[2];
 	memset(screen_warp_writes, 0, sizeof(screen_warp_writes));
@@ -1455,16 +1498,100 @@ static void GL_CreateDescriptorSets(void)
 	screen_warp_writes[0].descriptorCount = 1;
 	screen_warp_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	screen_warp_writes[0].dstSet = vulkan_globals.screen_warp_desc_set;
-	screen_warp_writes[0].pImageInfo = &input_image_info;
+	screen_warp_writes[0].pImageInfo = &input_to_warp_image_info;
 	screen_warp_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	screen_warp_writes[1].dstBinding = 1;
 	screen_warp_writes[1].dstArrayElement = 0;
 	screen_warp_writes[1].descriptorCount = 1;
 	screen_warp_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 	screen_warp_writes[1].dstSet = vulkan_globals.screen_warp_desc_set;
-	screen_warp_writes[1].pImageInfo = &output_image_info;
+	screen_warp_writes[1].pImageInfo = &warp_to_blur_image_info;
 
 	vkUpdateDescriptorSets(vulkan_globals.device, 2, screen_warp_writes, 0, NULL);
+
+	//
+	VkDescriptorImageInfo Hblur_to_Vblur_image_info;
+	memset(&Hblur_to_Vblur_image_info, 0, sizeof(Hblur_to_Vblur_image_info));
+	Hblur_to_Vblur_image_info.imageView = color_buffers_view[0];
+	Hblur_to_Vblur_image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+	VkWriteDescriptorSet blur_writes[2];
+	memset(blur_writes, 0, sizeof(blur_writes));
+	// HBLUR
+	// input
+	blur_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	blur_writes[0].dstBinding = 0;
+	blur_writes[0].dstArrayElement = 0;
+	blur_writes[0].descriptorCount = 1;
+	blur_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	blur_writes[0].dstSet = vulkan_globals.blur_desc_sets[0];
+	blur_writes[0].pImageInfo = &warp_to_blur_image_info;
+	// output
+	blur_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	blur_writes[1].dstBinding = 1;
+	blur_writes[1].dstArrayElement = 0;
+	blur_writes[1].descriptorCount = 1;
+	blur_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	blur_writes[1].dstSet = vulkan_globals.blur_desc_sets[0];
+	blur_writes[1].pImageInfo = &Hblur_to_Vblur_image_info;
+	vkUpdateDescriptorSets(vulkan_globals.device, 2, blur_writes, 0, NULL);
+	// VBLUR
+	VkDescriptorImageInfo VBlur_to_grade_image_info;
+	memset(&VBlur_to_grade_image_info, 0, sizeof(VBlur_to_grade_image_info));
+	VBlur_to_grade_image_info.imageView = color_buffers_view[1];
+	VBlur_to_grade_image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	VBlur_to_grade_image_info.sampler = vulkan_globals.clamped_linear_sampler;
+	// input
+	blur_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	blur_writes[0].dstBinding = 0;
+	blur_writes[0].dstArrayElement = 0;
+	blur_writes[0].descriptorCount = 1;
+	blur_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	blur_writes[0].dstSet = vulkan_globals.blur_desc_sets[1];
+	blur_writes[0].pImageInfo = &Hblur_to_Vblur_image_info;
+	// output
+	blur_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	blur_writes[1].dstBinding = 1;
+	blur_writes[1].dstArrayElement = 0;
+	blur_writes[1].descriptorCount = 1;
+	blur_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	blur_writes[1].dstSet = vulkan_globals.blur_desc_sets[1];
+	blur_writes[1].pImageInfo = &VBlur_to_grade_image_info;
+	vkUpdateDescriptorSets(vulkan_globals.device, 2, blur_writes, 0, NULL);
+
+	
+	// grade
+	VkDescriptorImageInfo grade_to_output_image_info;
+	memset(&grade_to_output_image_info, 0, sizeof(grade_to_output_image_info));
+	grade_to_output_image_info.imageView = color_buffers_view[0];
+	grade_to_output_image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	VkWriteDescriptorSet grade_writes[3];
+	memset(grade_writes, 0, sizeof(grade_writes));
+	// input
+	grade_writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	grade_writes[0].dstBinding = 0;
+	grade_writes[0].dstArrayElement = 0;
+	grade_writes[0].descriptorCount = 1;
+	grade_writes[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	grade_writes[0].dstSet = vulkan_globals.grade_desc_set;
+	grade_writes[0].pImageInfo = &VBlur_to_grade_image_info;
+	// color lut
+	grade_writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	grade_writes[1].dstBinding = 1;
+	grade_writes[1].dstArrayElement = 0;
+	grade_writes[1].descriptorCount = 1;
+	grade_writes[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	grade_writes[1].dstSet = vulkan_globals.grade_desc_set;
+	grade_writes[1].pImageInfo = &lut_image_info;
+	// output
+	grade_writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	grade_writes[2].dstBinding = 2;
+	grade_writes[2].dstArrayElement = 0;
+	grade_writes[2].descriptorCount = 1;
+	grade_writes[2].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	grade_writes[2].dstSet = vulkan_globals.grade_desc_set;
+	grade_writes[2].pImageInfo = &grade_to_output_image_info;
+	vkUpdateDescriptorSets(vulkan_globals.device, 3, grade_writes, 0, NULL);
 }
 
 /*
@@ -1686,6 +1813,173 @@ static void GL_CreateFrameBuffers( void )
 
 /*
 ===============
+GL_CreateColorLUT
+===============
+*/
+void GL_CreateColorLUT()
+{
+	// load color grading lut
+	static byte colorgrading_lut[64][64][64][4];
+	int colorlut_width = 0;
+	int colorlut_height = 0;
+	byte* colorlutdata = Image_LoadImage("colorlut", &colorlut_width, &colorlut_height);
+	//
+	if(colorlutdata && (colorlut_width >= (64*8)) && (colorlut_height >= (64*8))) {
+		for(int x = 0; x < 64; x++) {
+			for(int y = 0; y < 64; y++) {
+				for(int z = 0; z < 64; z++) {
+					const int x2 = (z%8)*64;
+					const int y2 = (z/8)*64;
+					const int size = colorlut_width * colorlut_height * 4;
+					const int position = ((x+x2)+((y+y2)*colorlut_width))*4;
+					const byte red = colorlutdata[position+0];
+					const byte green = colorlutdata[position+1];
+					const byte blue = colorlutdata[position+2];
+					colorgrading_lut[z][y][x][0] = red;
+					colorgrading_lut[z][y][x][1] = green;
+					colorgrading_lut[z][y][x][2] = blue;
+					colorgrading_lut[z][y][x][3] = 255;
+				}
+			}
+		}
+	} else {
+		for(int x = 0; x < 64; x++) {
+			for(int y = 0; y < 64; y++) {
+				for(int z = 0; z < 64; z++) {
+					const int x2 = (z%8)*64;
+					const int y2 = (z/8)*64;
+					const byte red = x*4;
+					const byte green = y*4;
+					const byte blue = z*4;
+					colorgrading_lut[x][y][z][2] = red;
+					colorgrading_lut[x][y][z][1] = green;
+					colorgrading_lut[x][y][z][0] = blue;
+					colorgrading_lut[x][y][z][3] = 255;
+				}
+			}
+		}
+	}
+	//
+	
+	VkImageCreateInfo image_create_info;
+	memset(&image_create_info, 0, sizeof(image_create_info));
+	image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	image_create_info.pNext = NULL;
+	image_create_info.imageType = VK_IMAGE_TYPE_3D;
+	image_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+	image_create_info.extent.width = 64;
+	image_create_info.extent.height = 64;
+	image_create_info.extent.depth = 64;
+	image_create_info.mipLevels = 1;
+	image_create_info.arrayLayers = 1;
+	image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+	image_create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+	image_create_info.usage = (VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+
+	VkResult err;
+	err = vkCreateImage(vulkan_globals.device, &image_create_info, NULL, &vulkan_globals.colorlut_buffer);
+
+	if (err != VK_SUCCESS)
+		Sys_Error("vkCreateImage failed");
+
+	VkMemoryRequirements memory_requirements;
+	vkGetImageMemoryRequirements(vulkan_globals.device, vulkan_globals.colorlut_buffer, &memory_requirements);
+
+	VkMemoryDedicatedAllocateInfoKHR dedicated_allocation_info;
+	memset(&dedicated_allocation_info, 0, sizeof(dedicated_allocation_info));
+	dedicated_allocation_info.sType = VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR;
+	dedicated_allocation_info.image = vulkan_globals.colorlut_buffer;
+
+	VkMemoryAllocateInfo memory_allocate_info;
+	memset(&memory_allocate_info, 0, sizeof(memory_allocate_info));
+	memory_allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	memory_allocate_info.allocationSize = memory_requirements.size;
+	memory_allocate_info.memoryTypeIndex = GL_MemoryTypeFromProperties(memory_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, 0);
+
+	if (vulkan_globals.dedicated_allocation)
+		memory_allocate_info.pNext = &dedicated_allocation_info;
+
+	num_vulkan_misc_allocations += 1;
+	err = vkAllocateMemory(vulkan_globals.device, &memory_allocate_info, NULL, colorgrading_lut_memory);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkAllocateMemory failed");
+
+	err = vkBindImageMemory(vulkan_globals.device, vulkan_globals.colorlut_buffer, *colorgrading_lut_memory, 0);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkBindImageMemory failed");
+
+	VkImageViewCreateInfo image_view_create_info;
+	memset(&image_view_create_info, 0, sizeof(image_view_create_info));
+	image_view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+	image_view_create_info.format = VK_FORMAT_R8G8B8A8_UNORM;
+	image_view_create_info.components.r = VK_COMPONENT_SWIZZLE_R;
+	image_view_create_info.components.g = VK_COMPONENT_SWIZZLE_G;
+	image_view_create_info.components.b = VK_COMPONENT_SWIZZLE_B;
+	image_view_create_info.components.a = VK_COMPONENT_SWIZZLE_A;
+	image_view_create_info.image = vulkan_globals.colorlut_buffer;
+	image_view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_view_create_info.subresourceRange.baseMipLevel = 0;
+	image_view_create_info.subresourceRange.levelCount = 1;
+	image_view_create_info.subresourceRange.baseArrayLayer = 0;
+	image_view_create_info.subresourceRange.layerCount = 1;
+	image_view_create_info.viewType = VK_IMAGE_VIEW_TYPE_3D;
+	image_view_create_info.flags = 0;
+
+	err = vkCreateImageView(vulkan_globals.device, &image_view_create_info, NULL, colorgrading_lut_view);
+	if (err != VK_SUCCESS)
+		Sys_Error("vkCreateImageView failed");
+
+	// Upload
+	VkBufferImageCopy regions[1];
+	memset(&regions, 0, sizeof(regions));
+
+	int staging_size = 64*64*64*4;
+
+	VkBuffer staging_buffer;
+	VkCommandBuffer command_buffer;
+	int staging_offset;
+	unsigned char * staging_memory = R_StagingAllocate(staging_size, 4, &command_buffer, &staging_buffer, &staging_offset);
+
+	{
+		memcpy(staging_memory, (byte*)colorgrading_lut, 64 * 64 * 64 * 4);
+		regions[0].bufferOffset = staging_offset;
+		regions[0].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		regions[0].imageSubresource.layerCount = 1;
+		regions[0].imageSubresource.mipLevel = 0;
+		regions[0].imageExtent.width = 64;
+		regions[0].imageExtent.height = 64;
+		regions[0].imageExtent.depth = 64;
+	}
+
+	VkImageMemoryBarrier image_memory_barrier;
+	memset(&image_memory_barrier, 0, sizeof(image_memory_barrier));
+	image_memory_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	image_memory_barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	image_memory_barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	image_memory_barrier.image = vulkan_globals.colorlut_buffer;
+	image_memory_barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	image_memory_barrier.subresourceRange.baseMipLevel = 0;
+	image_memory_barrier.subresourceRange.levelCount = 1;
+	image_memory_barrier.subresourceRange.baseArrayLayer = 0;
+	image_memory_barrier.subresourceRange.layerCount = 1;
+
+	image_memory_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	image_memory_barrier.srcAccessMask = 0;
+	image_memory_barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, NULL, 0, NULL, 1, &image_memory_barrier);
+
+	vkCmdCopyBufferToImage(command_buffer, staging_buffer, vulkan_globals.colorlut_buffer, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, regions);
+
+	image_memory_barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+	image_memory_barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	image_memory_barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+	image_memory_barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	vkCmdPipelineBarrier(command_buffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, NULL, 0, NULL, 1, &image_memory_barrier);
+}
+
+/*
+===============
 GL_CreateRenderResources
 ===============
 */
@@ -1700,6 +1994,7 @@ static void GL_CreateRenderResources( void )
 	GL_CreateDepthBuffer();
 	GL_CreateRenderPasses();
 	GL_CreateFrameBuffers();
+	GL_CreateColorLUT();
 	R_CreatePipelines();
 	GL_CreateDescriptorSets();
 
@@ -1726,6 +2021,16 @@ static void GL_DestroyRenderResources( void )
 
 	vkFreeDescriptorSets(vulkan_globals.device, vulkan_globals.descriptor_pool, 1, &vulkan_globals.screen_warp_desc_set);
 	vulkan_globals.screen_warp_desc_set = VK_NULL_HANDLE;
+
+	vkFreeDescriptorSets(vulkan_globals.device, vulkan_globals.descriptor_pool, 1, &vulkan_globals.grade_desc_set);
+	vulkan_globals.grade_desc_set = VK_NULL_HANDLE;
+
+	vkDestroyImageView(vulkan_globals.device, colorgrading_lut_view[0], NULL);
+	colorgrading_lut_view[0] = VK_NULL_HANDLE;
+	vkDestroyImage(vulkan_globals.device, vulkan_globals.colorlut_buffer, NULL);
+	vulkan_globals.colorlut_buffer = VK_NULL_HANDLE;
+	vkFreeMemory(vulkan_globals.device, colorgrading_lut_memory[0], NULL);
+	colorgrading_lut_memory[0] = VK_NULL_HANDLE;
 
 	if (msaa_color_buffer)
 	{

@@ -57,5 +57,9 @@ extern unsigned char showtris_vert_spv[];
 extern int showtris_vert_spv_size;
 extern unsigned char showtris_frag_spv[];
 extern int showtris_frag_spv_size;
+extern unsigned char grade_comp_spv[];
+extern int grade_comp_spv_size;
+extern unsigned char blur_comp_spv[];
+extern int blur_comp_spv_size;
 
 #endif

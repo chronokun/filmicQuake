@@ -1,0 +1,122 @@
+#version 450
+#extension GL_ARB_separate_shader_objects : enable
+#extension GL_ARB_shading_language_420pack : enable
+
+layout(push_constant) uniform PushConsts {
+	uvec2 screen_size;
+	uint useAces;
+	float aspect_ratio;
+	float time;
+	float aberrationScale;
+	float barrelScale;
+	float vignette;
+	float grainDepth;
+} push_constants;
+
+layout(set = 0, binding = 0) uniform sampler2D input_texture;
+layout(set = 0, binding = 1) uniform sampler3D lut_tex;
+layout(set = 0, binding = 2, rgba8) uniform writeonly image2D output_image;
+
+vec3 HSVToRGB(vec3 hsv)
+{
+	float h = hsv.x;
+	float s = hsv.y;
+	float v = hsv.z;
+	h /= 1.0/6.0;
+	int i = int(floor(h));
+	float f = h - i;
+	float p = v * (1.0 - s);
+	float q = v * (1.0 - s * f);
+	float t = v * (1.0 - s * (1.0 - f));
+	switch(i) {
+		case 0:
+			return vec3(v, t, p);
+		case 1:
+			return vec3(q, v, p);
+		case 2:
+			return vec3(p, v, t);
+		case 3:
+			return vec3(p, q, v);
+		case 4:
+			return vec3(t, p, v);
+		default:
+			return vec3(v, p, q);
+	}
+	return vec3(0.);
+}
+
+// https://www.shadertoy.com/view/Xtt3Wn
+float hash(float seed)
+{
+	return fract(sin(seed)*43758.5453 );
+}
+
+vec2 barrelDistort(vec2 p, vec2 warp)
+{
+	p=p*2.0-1.0;
+	p*=vec2(1.0+(p.y*p.y)*warp.x,1.0+(p.x*p.x)*warp.y);
+	return p*0.5+0.5;
+}
+
+vec3 ACESFilm(vec3 x)
+{
+    float a = 2.51f;
+    float b = 0.03f;
+    float c = 2.43f;
+    float d = 0.59f;
+    float e = 0.14f;
+    return clamp((x*(a*x+b))/(x*(c*x+d)+e), 0., 1.);
+}
+
+#define SAMPLECOUNT 12
+
+layout (local_size_x = 8, local_size_y = 8) in;
+void main() 
+{
+	ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+	ivec2 size = ivec2(push_constants.screen_size);
+	if((gid.x > size.x) || (gid.y > size.y)) {
+		return;
+	}
+	vec2 texcoord = vec2(gid)/vec2(size);
+	vec2 position = (texcoord-vec2(.5))*2.;
+	vec2 pix = vec2(gid);
+	vec2 direction = normalize(position);
+	float amount = pow(length(vec2(position.x*push_constants.aspect_ratio, position.y)), 1.)/200.;
+	amount *= push_constants.aberrationScale;
+	float seed = mod(float(gid.x), 128)+(float(gid.y)*128)+(sin(floor(push_constants.time*120))*128*128);
+	float jitter = hash(seed);
+	vec3 color = vec3(0.);
+	for(int i = 0; i < SAMPLECOUNT; i++) {
+		float t = i/(float(SAMPLECOUNT)+0.);
+		t += jitter/float(SAMPLECOUNT+1.);
+		float offset = amount*t;
+		vec2 samplePosition = position+(direction*offset);
+		vec2 warp = vec2(push_constants.aspect_ratio*(1./16.), 1./16.);
+		warp *= push_constants.barrelScale;
+		samplePosition *= vec2(1.)-warp;
+		samplePosition = samplePosition*.5+vec2(.5);
+		samplePosition = barrelDistort(samplePosition, warp);
+		if(		((samplePosition.x > 0.) && (samplePosition.y > 0.))
+			&&	((samplePosition.x < 1.) && (samplePosition.y < 1.))) {
+			vec3 s = texture(input_texture, samplePosition).xyz;
+			vec3 b = HSVToRGB(vec3(t, 1., 1.));
+			//color += pow((s * b), vec3(1./push_constants.gamma));
+			color += (s * b);
+		}
+	}
+	color /= SAMPLECOUNT/3.;
+	//
+	color *= pow(clamp(1.-(length(position)*push_constants.vignette), 0, 1), 2.0);
+	float grainSize = 1;
+	float seed2 = mod(floor(pix.x/grainSize), 128)+(floor(pix.y/grainSize)*128)+(sin(floor(push_constants.time*120))*128*128);
+	color += vec3((hash(seed2)-0.5) / 32) * push_constants.grainDepth;
+	//
+	if(push_constants.useAces != 0) {
+		color = ACESFilm(color);
+	}
+	//
+	color = texture(lut_tex, color).xyz;
+	//
+	imageStore(output_image, gid, vec4(color, 1.));
+}

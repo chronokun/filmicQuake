@@ -313,6 +313,12 @@
     <ClCompile Include="..\..\Shaders\Compiled\showtris_vert.c">
       <Filter>Shaders</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Shaders\Compiled\blur_comp.c">
+      <Filter>Shaders\Compiled</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Shaders\Compiled\grade_comp.c">
+      <Filter>Shaders\Compiled</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Quake\snd_codec.h">
@@ -575,6 +581,12 @@
       <Filter>Shaders</Filter>
     </None>
     <None Include="..\..\Shaders\showtris.frag">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\Shaders\blur.comp">
+      <Filter>Shaders</Filter>
+    </None>
+    <None Include="..\..\Shaders\grade.comp">
       <Filter>Shaders</Filter>
     </None>
   </ItemGroup>

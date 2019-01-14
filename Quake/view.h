@@ -25,6 +25,12 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 extern	cvar_t		vid_gamma;
 extern	cvar_t		vid_contrast;
+extern	cvar_t		vid_aberration;
+extern	cvar_t		vid_barrel;
+extern	cvar_t		vid_vignette;
+extern	cvar_t		vid_grain;
+extern	cvar_t		vid_blur;
+extern	cvar_t		vid_aces;
 
 extern float v_blend[4];
 
