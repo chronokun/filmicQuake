@@ -18,7 +18,7 @@ Possible future features:
 * Lens Flare
 * In-Engine LUT Editing
 
-To make use of LUT based color grading, copy colorlut.tga to the ID1 folder in your Quake directory after making any color adjustments you wish using your preferred color grading software.
+To make use of LUT based color grading, copy identitylut.tga to the ID1 folder in your Quake directory and rename it to colorlut.tga after making any color adjustments you wish using your preferred color grading software.
 
 # vkQuake
 vkQuake is a Quake 1 port using Vulkan instead of OpenGL for rendering. It is based on the popular [QuakeSpasm](http://quakespasm.sourceforge.net/) port and runs all mods compatible with it like [Arcane Dimensions](https://www.quaddicted.com/reviews/ad_v1_50final.html) or [In The Shadows](http://www.moddb.com/mods/its).
