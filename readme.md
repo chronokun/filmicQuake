@@ -8,6 +8,15 @@ Current features:
 * Film Grain
 * Two-pass Gaussian Blur
 * ACES Tonemapping
+* Color Grading using LUT
+
+Possible future features:
+* Motion Blur
+* Depth of Field
+* Bloom
+* Halation
+* Lens Flare
+* In-Engine LUT Editing
 
 # vkQuake
 vkQuake is a Quake 1 port using Vulkan instead of OpenGL for rendering. It is based on the popular [QuakeSpasm](http://quakespasm.sourceforge.net/) port and runs all mods compatible with it like [Arcane Dimensions](https://www.quaddicted.com/reviews/ad_v1_50final.html) or [In The Shadows](http://www.moddb.com/mods/its).
