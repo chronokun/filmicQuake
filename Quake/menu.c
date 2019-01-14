@@ -1213,7 +1213,7 @@ void M_Options_Draw (void)
 
 	// Draw the items in the order of the enum defined above:
 	// OPT_CUSTOMIZE:
-	M_Print (16, 32,			"              Controls");
+	M_Print (16, 32,					"              Controls");
 	// OPT_CONSOLE:
 	M_Print (16, 32 + 8*OPT_CONSOLE,	"          Goto console");
 	// OPT_DEFAULTS:

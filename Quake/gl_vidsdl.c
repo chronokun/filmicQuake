@@ -1482,7 +1482,7 @@ static void GL_CreateDescriptorSets(void)
 	VkDescriptorImageInfo input_to_warp_image_info;
 	memset(&input_to_warp_image_info, 0, sizeof(input_to_warp_image_info));
 	input_to_warp_image_info.imageView = color_buffers_view[0];
-	input_to_warp_image_info.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	input_to_warp_image_info.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 	input_to_warp_image_info.sampler = vulkan_globals.linear_sampler;
 
 	VkDescriptorImageInfo warp_to_blur_image_info;
