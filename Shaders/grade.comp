@@ -101,7 +101,6 @@ void main()
 			&&	((samplePosition.x < 1.) && (samplePosition.y < 1.))) {
 			vec3 s = texture(input_texture, samplePosition).xyz;
 			vec3 b = HSVToRGB(vec3(t, 1., 1.));
-			//color += pow((s * b), vec3(1./push_constants.gamma));
 			color += (s * b);
 		}
 	}

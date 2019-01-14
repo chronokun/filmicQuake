@@ -62,7 +62,6 @@ void main()
 			divisor += weight;
 		}
 		finalColor *= (1./divisor);
-		//finalColor[push_constants.blurAxis] = 0.;
 		imageStore(output_image, storePosition, vec4(finalColor, 1.));
 	}
 }
