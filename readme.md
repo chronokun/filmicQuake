@@ -1,4 +1,15 @@
 # Overview
+filmicQuake is a fork of vkQuake with additional postprocessing options.
+
+Current features:
+* Chromatic aberration
+* Barrel Distortion
+* Vignette
+* Film Grain
+* Two-pass Gaussian Blur
+* ACES Tonemapping
+
+# vkQuake
 vkQuake is a Quake 1 port using Vulkan instead of OpenGL for rendering. It is based on the popular [QuakeSpasm](http://quakespasm.sourceforge.net/) port and runs all mods compatible with it like [Arcane Dimensions](https://www.quaddicted.com/reviews/ad_v1_50final.html) or [In The Shadows](http://www.moddb.com/mods/its).
 
 Compared to QuakeSpasm vkQuake also features a software Quake like underwater effect, has better color precision, generates mipmap for water surfaces at runtime and has native support for anti-aliasing and AF.
