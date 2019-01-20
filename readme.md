@@ -17,6 +17,11 @@ Possible future features:
 * Halation
 * Lens Flare
 * In-Engine LUT Editing
+* Better Film Grain (blue noise?)
+* Ambient Occlusion
+* Temporal Anti-Aliasing
+* Sharpening Filter
+* Loading LUTs from maps
 
 To make use of LUT based color grading, copy identitylut.tga to the ID1 folder in your Quake directory and rename it to colorlut.tga after making any color adjustments you wish using your preferred color grading software.
 
